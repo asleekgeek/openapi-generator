@@ -105,6 +105,30 @@ paths:
           - OPTION_3
           type: string
         style: form
+      - explode: true
+        in: query
+        name: defaultInt
+        required: false
+        schema:
+          default: 1
+          type: integer
+        style: form
+      - explode: true
+        in: query
+        name: defaultNum
+        required: false
+        schema:
+          default: 1.5
+          type: number
+        style: form
+      - explode: true
+        in: query
+        name: defaultStr
+        required: false
+        schema:
+          default: default
+          type: string
+        style: form
       - deprecated: true
         description: Status values that need to be considered for filter
         explode: false
@@ -631,10 +655,10 @@ paths:
         schema:
           type: string
         style: form
-      - description: The password for login in clear text
+      - description: Remember Me
         explode: true
         in: query
-        name: boolean_test
+        name: remember_me
         required: false
         schema:
           type: boolean
@@ -702,10 +726,10 @@ paths:
         schema:
           type: string
         style: simple
-      - description: boolean query parameter
+      - description: Confirm the deletion
         explode: true
         in: query
-        name: boolean_test
+        name: confirmation
         required: false
         schema:
           type: boolean
@@ -869,8 +893,31 @@ paths:
       summary: Get the pets by time
       tags:
       - pet
+  /fake/collection/test:
+    post:
+      operationId: fakePostTest
+      requestBody:
+        $ref: '#/components/requestBodies/TestBody'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: bool
+          description: Successful Operation
+      summary: POST a test batch
+      tags:
+      - fake
 components:
   requestBodies:
+    TestBody:
+      content:
+        text/plain:
+          schema:
+            format: byte
+            type: string
+      description: Test body
+      required: true
     UserArray:
       content:
         application/json:
@@ -890,6 +937,13 @@ components:
             $ref: '#/components/schemas/Pet'
       description: Pet object that needs to be added to the store
       required: true
+  responses:
+    SuccessfulOp:
+      content:
+        application/json:
+          schema:
+            type: bool
+      description: Successful Operation
   schemas:
     OrderInfo:
       description: An order info for a pets from the pet store

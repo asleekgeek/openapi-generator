@@ -10,6 +10,7 @@ import java.util.Arrays;
 import java.util.List;
 import org.openapitools.model.Category;
 import org.openapitools.model.Tag;
+import org.springframework.lang.Nullable;
 import org.openapitools.jackson.nullable.JsonNullable;
 import java.time.OffsetDateTime;
 import jakarta.validation.Valid;
@@ -23,7 +24,7 @@ import jakarta.annotation.Generated;
  * A pet for sale in the pet store
  */
 
-@Generated(value = "org.openapitools.codegen.languages.SpringCodegen", comments = "Generator version: 7.5.0-SNAPSHOT")
+@Generated(value = "org.openapitools.codegen.languages.SpringCodegen", comments = "Generator version: 7.11.0-SNAPSHOT")
 public class Pet {
 
   private Optional<Long> id = Optional.empty();
@@ -36,7 +37,7 @@ public class Pet {
   private List<String> photoUrls = new ArrayList<>();
 
   @Valid
-  private List<@Valid Tag> tags;
+  private List<@Valid Tag> tags = new ArrayList<>();
 
   /**
    * pet status in the store
@@ -98,7 +99,7 @@ public class Pet {
   /**
    * Get id
    * @return id
-  */
+   */
   
   @JsonProperty("id")
   public Optional<Long> getId() {
@@ -117,7 +118,7 @@ public class Pet {
   /**
    * Get category
    * @return category
-  */
+   */
   @Valid 
   @JsonProperty("category")
   public Optional<Category> getCategory() {
@@ -136,7 +137,7 @@ public class Pet {
   /**
    * Get name
    * @return name
-  */
+   */
   @NotNull 
   @JsonProperty("name")
   public String getName() {
@@ -163,7 +164,7 @@ public class Pet {
   /**
    * Get photoUrls
    * @return photoUrls
-  */
+   */
   @NotNull 
   @JsonProperty("photoUrls")
   public List<String> getPhotoUrls() {
@@ -190,7 +191,7 @@ public class Pet {
   /**
    * Get tags
    * @return tags
-  */
+   */
   @Valid 
   @JsonProperty("tags")
   public List<@Valid Tag> getTags() {
@@ -210,7 +211,7 @@ public class Pet {
    * pet status in the store
    * @return status
    * @deprecated
-  */
+   */
   
   @JsonProperty("status")
   @Deprecated
@@ -220,7 +221,7 @@ public class Pet {
 
   /**
    * @deprecated
-  */
+   */
   @Deprecated
   public void setStatus(Optional<StatusEnum> status) {
     this.status = status;

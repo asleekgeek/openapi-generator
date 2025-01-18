@@ -4,6 +4,7 @@ import java.net.URI;
 import java.util.Objects;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonCreator;
+import org.springframework.lang.Nullable;
 import org.openapitools.jackson.nullable.JsonNullable;
 import java.time.OffsetDateTime;
 import jakarta.validation.Valid;
@@ -17,7 +18,7 @@ import jakarta.annotation.Generated;
  * A User who is purchasing from the pet store
  */
 
-@Generated(value = "org.openapitools.codegen.languages.SpringCodegen", comments = "Generator version: 7.5.0-SNAPSHOT")
+@Generated(value = "org.openapitools.codegen.languages.SpringCodegen", comments = "Generator version: 7.11.0-SNAPSHOT")
 public class User {
 
   private Optional<Long> id = Optional.empty();
@@ -44,7 +45,7 @@ public class User {
   /**
    * Get id
    * @return id
-  */
+   */
   
   @JsonProperty("id")
   public Optional<Long> getId() {
@@ -63,7 +64,7 @@ public class User {
   /**
    * Get username
    * @return username
-  */
+   */
   
   @JsonProperty("username")
   public Optional<String> getUsername() {
@@ -82,7 +83,7 @@ public class User {
   /**
    * Get firstName
    * @return firstName
-  */
+   */
   
   @JsonProperty("firstName")
   public Optional<String> getFirstName() {
@@ -101,7 +102,7 @@ public class User {
   /**
    * Get lastName
    * @return lastName
-  */
+   */
   
   @JsonProperty("lastName")
   public Optional<String> getLastName() {
@@ -120,7 +121,7 @@ public class User {
   /**
    * Get email
    * @return email
-  */
+   */
   
   @JsonProperty("email")
   public Optional<String> getEmail() {
@@ -139,7 +140,7 @@ public class User {
   /**
    * Get password
    * @return password
-  */
+   */
   
   @JsonProperty("password")
   public Optional<String> getPassword() {
@@ -158,7 +159,7 @@ public class User {
   /**
    * Get phone
    * @return phone
-  */
+   */
   
   @JsonProperty("phone")
   public Optional<String> getPhone() {
@@ -177,7 +178,7 @@ public class User {
   /**
    * User Status
    * @return userStatus
-  */
+   */
   
   @JsonProperty("userStatus")
   public Optional<Integer> getUserStatus() {

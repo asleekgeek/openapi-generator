@@ -2,7 +2,6 @@ package org.openapitools.codegen.languages;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
-import io.swagger.v3.oas.models.media.ArraySchema;
 import io.swagger.v3.oas.models.media.FileSchema;
 import io.swagger.v3.oas.models.media.Schema;
 import org.openapitools.codegen.*;
@@ -21,6 +20,8 @@ import static org.openapitools.codegen.utils.StringUtils.*;
 public abstract class AbstractRustCodegen extends DefaultCodegen implements CodegenConfig {
 
     private final Logger LOGGER = LoggerFactory.getLogger(AbstractRustCodegen.class);
+
+    protected static final String VENDOR_EXTENSION_PARAM_IDENTIFIER = "x-rust-param-identifier";
 
     protected List<String> charactersToAllow = Collections.singletonList("_");
     protected Set<String> keywordsThatDoNotSupportRawIdentifiers = new HashSet<>(
@@ -148,8 +149,6 @@ public abstract class AbstractRustCodegen extends DefaultCodegen implements Code
 
     public enum CasingType {CAMEL_CASE, SNAKE_CASE}
 
-    ;
-
     /**
      * General purpose sanitizing function for Rust identifiers (fields, variables, structs, parameters, etc.).<br>
      * Rules for Rust are fairly simple:
@@ -236,8 +235,7 @@ public abstract class AbstractRustCodegen extends DefaultCodegen implements Code
     @Override
     public String getTypeDeclaration(Schema p) {
         if (ModelUtils.isArraySchema(p)) {
-            ArraySchema ap = (ArraySchema) p;
-            Schema inner = ap.getItems();
+            Schema inner = ModelUtils.getSchemaItems(p);
             String innerType = getTypeDeclaration(inner);
             return typeMapping.get("array") + "<" + innerType + ">";
         } else if (ModelUtils.isMapSchema(p)) {
@@ -249,8 +247,7 @@ public abstract class AbstractRustCodegen extends DefaultCodegen implements Code
         } else if (!org.apache.commons.lang3.StringUtils.isEmpty(p.get$ref())) {
             String datatype;
             try {
-                datatype = toModelName(ModelUtils.getSimpleRef(p.get$ref()));
-                datatype = "models::" + toModelName(datatype);
+                datatype = "models::" + toModelName(ModelUtils.getSimpleRef(p.get$ref()));
             } catch (Exception e) {
                 LOGGER.warn("Error obtaining the datatype from schema (model):{}. Datatype default to Object", p);
                 datatype = "Object";
@@ -435,5 +432,13 @@ public abstract class AbstractRustCodegen extends DefaultCodegen implements Code
     @Override
     public String addRegularExpressionDelimiter(String pattern) {
         return pattern;
+    }
+
+    @Override
+    public String escapeReservedWord(String name) {
+        if (this.reservedWordsMappings().containsKey(name)) {
+            return this.reservedWordsMappings().get(name);
+        }
+        return "r#" + name;
     }
 }
