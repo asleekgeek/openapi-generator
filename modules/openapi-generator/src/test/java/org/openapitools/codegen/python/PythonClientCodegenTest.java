@@ -17,7 +17,7 @@
 
 package org.openapitools.codegen.python;
 
-import static org.junit.Assert.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import com.google.common.collect.Sets;
 import io.swagger.parser.OpenAPIParser;
 import io.swagger.v3.oas.models.OpenAPI;
@@ -28,10 +28,11 @@ import io.swagger.v3.parser.util.SchemaTypeUtil;
 import org.openapitools.codegen.*;
 import org.openapitools.codegen.languages.PythonClientCodegen;
 import org.openapitools.codegen.languages.features.CXFServerFeatures;
+
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.openapitools.codegen.TestUtils.assertFileContains;
 import static org.openapitools.codegen.TestUtils.assertFileExists;
 import org.openapitools.codegen.TestUtils;
-import org.openapitools.codegen.java.assertions.JavaFileAssert;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 import java.io.File;
@@ -529,5 +530,40 @@ public class PythonClientCodegenTest {
                 .get(Paths.get(output.getAbsolutePath(), "openapi_client", "api", "hello_example_api.py").toString());
         assertNotNull(apiFile);
         assertFileContains(apiFile.toPath(), "_header_params['X-CUSTOM_CONSTANT_HEADER'] = 'CONSTANT_VALUE'");
+        assertFileContains(apiFile.toPath(), "_query_params.append(('CONSTANT_QUERY_STRING_KEY', 'CONSTANT_QUERY_STRING_VALUE'))");
+    }
+
+    @Test(description = "Enum value with quotes (#17582)")
+    public void testEnumPropertyWithQuotes() {
+        final PythonClientCodegen codegen = new PythonClientCodegen();
+
+        Assert.assertEquals(codegen.toEnumValue("enum-value", "string"), "'enum-value'");
+        Assert.assertEquals(codegen.toEnumValue("won't fix", "string"), "'won\\'t fix'");
+        Assert.assertEquals(codegen.toEnumValue("\"", "string"), "'\\\"'");
+        Assert.assertEquals(codegen.toEnumValue("1.0", "float"), "1.0");
+        Assert.assertEquals(codegen.toEnumValue("1", "int"), "1");
+    }
+
+    @Test
+    public void testHandleNoApis() throws IOException {
+        File output = Files.createTempDirectory("test").toFile().getCanonicalFile();
+        output.deleteOnExit();
+        final OpenAPI openAPI = TestUtils.parseFlattenSpec("src/test/resources/3_0/no_apis.yaml");
+        final DefaultGenerator defaultGenerator = new DefaultGenerator();
+        final ClientOptInput clientOptInput = new ClientOptInput();
+        clientOptInput.openAPI(openAPI);
+        PythonClientCodegen pythonClientCodegen = new PythonClientCodegen();
+        pythonClientCodegen.setOutputDir(output.getAbsolutePath());
+        clientOptInput.config(pythonClientCodegen);
+        defaultGenerator.opts(clientOptInput);
+
+        Map<String, File> files = defaultGenerator.generate().stream().collect(Collectors.toMap(File::getPath, Function.identity()));
+
+        File apiFile = files.get(Paths.get(output.getAbsolutePath(), "openapi_client", "api", "hello_example_api.py").toString());
+        assertNull(apiFile);
+
+        File setupFile = files.get(Paths.get(output.getAbsolutePath(), "setup.py").toString());
+        assertNotNull(setupFile);
+        assertFileContains(setupFile.toPath(), "setup(");
     }
 }

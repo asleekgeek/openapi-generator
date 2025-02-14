@@ -10,9 +10,6 @@ on:
       - 'samples/client/petstore/kotlin*/**'
       - 'samples/client/others/kotlin-jvm-okhttp-parameter-tests/**'
 
-env:
-  GRADLE_VERSION: 6.9
-
 jobs:
   build:
     name: Build Kotlin client
@@ -23,8 +20,10 @@ jobs:
         sample:
           # client
           - samples/client/petstore/kotlin
+          - samples/client/petstore/kotlin-explicit
           - samples/client/petstore/kotlin-gson
           - samples/client/petstore/kotlin-jackson
+          - samples/client/petstore/kotlin-model-prefix-type-mappings
           # needs Android configured
           #- samples/client/petstore/kotlin-json-request-string
           - samples/client/petstore/kotlin-jvm-okhttp4-coroutines
@@ -64,7 +63,6 @@ jobs:
           - samples/client/echo_api/kotlin-jvm-spring-3-webclient
           - samples/client/petstore/kotlin-jvm-spring-3-restclient
           - samples/client/echo_api/kotlin-jvm-spring-3-restclient
-          - samples/client/petstore/kotlin-spring-cloud
           - samples/client/petstore/kotlin-name-parameter-mappings
           - samples/client/others/kotlin-jvm-okhttp-parameter-tests
     steps:
@@ -72,7 +70,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: 8
+          java-version: 11
       - name: Cache maven dependencies
         uses: actions/cache@v4
         env:
@@ -84,7 +82,6 @@ jobs:
       - name: Install Gradle wrapper
         uses: eskatos/gradle-command-action@v3
         with:
-          gradle-version: ${{ env.GRADLE_VERSION }}
           build-root-directory: ${{ matrix.sample }}
           arguments: wrapper
       - name: Build

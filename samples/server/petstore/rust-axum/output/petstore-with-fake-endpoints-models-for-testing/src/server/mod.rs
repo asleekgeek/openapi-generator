@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use axum::{body::Body, extract::*, response::Response, routing::*};
-use axum_extra::extract::{CookieJar, Multipart};
+use axum_extra::extract::{CookieJar, Host};
 use bytes::Bytes;
 use http::{header::CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue, Method, StatusCode};
 use tracing::error;
@@ -10,115 +10,124 @@ use validator::{Validate, ValidationErrors};
 use crate::{header, types::*};
 
 #[allow(unused_imports)]
-use crate::models;
-
-use crate::{
-    AddPetResponse, Api, Call123exampleResponse, CreateUserResponse,
-    CreateUsersWithArrayInputResponse, CreateUsersWithListInputResponse, DeleteOrderResponse,
-    DeletePetResponse, DeleteUserResponse, FakeOuterBooleanSerializeResponse,
-    FakeOuterCompositeSerializeResponse, FakeOuterNumberSerializeResponse,
-    FakeOuterStringSerializeResponse, FakeResponseWithNumericalDescriptionResponse,
-    FindPetsByStatusResponse, FindPetsByTagsResponse, GetInventoryResponse, GetOrderByIdResponse,
-    GetPetByIdResponse, GetUserByNameResponse, HyphenParamResponse, LoginUserResponse,
-    LogoutUserResponse, PlaceOrderResponse, TestBodyWithQueryParamsResponse, TestClassnameResponse,
-    TestClientModelResponse, TestEndpointParametersResponse, TestEnumParametersResponse,
-    TestInlineAdditionalPropertiesResponse, TestJsonFormDataResponse, TestSpecialTagsResponse,
-    UpdatePetResponse, UpdatePetWithFormResponse, UpdateUserResponse, UploadFileResponse,
-};
+use crate::{apis, models};
 
 /// Setup API Server.
-pub fn new<I, A>(api_impl: I) -> Router
+pub fn new<I, A, E, C>(api_impl: I) -> Router
 where
     I: AsRef<A> + Clone + Send + Sync + 'static,
-    A: Api + 'static,
+    A: apis::another_fake::AnotherFake<E>
+        + apis::fake::Fake<E>
+        + apis::fake_classname_tags123::FakeClassnameTags123<E>
+        + apis::pet::Pet<E, Claims = C>
+        + apis::store::Store<E, Claims = C>
+        + apis::user::User<E>
+        + apis::ApiKeyAuthHeader<Claims = C>
+        + Send
+        + Sync
+        + 'static,
+    E: std::fmt::Debug + Send + Sync + 'static,
+    C: Send + Sync + 'static,
 {
     // build our application with a route
     Router::new()
-        .route("/v2/another-fake/dummy", patch(test_special_tags::<I, A>))
+        .route(
+            "/v2/another-fake/dummy",
+            patch(test_special_tags::<I, A, E>),
+        )
         .route(
             "/v2/fake",
-            get(test_enum_parameters::<I, A>)
-                .patch(test_client_model::<I, A>)
-                .post(test_endpoint_parameters::<I, A>),
+            get(test_enum_parameters::<I, A, E>)
+                .patch(test_client_model::<I, A, E>)
+                .post(test_endpoint_parameters::<I, A, E>),
         )
         .route(
             "/v2/fake/body-with-query-params",
-            put(test_body_with_query_params::<I, A>),
+            put(test_body_with_query_params::<I, A, E>),
         )
         .route(
-            "/v2/fake/hyphenParam/:hyphen_param",
-            get(hyphen_param::<I, A>),
+            "/v2/fake/hyphenParam/{hyphen_param}",
+            get(hyphen_param::<I, A, E>),
         )
         .route(
             "/v2/fake/inline-additionalProperties",
-            post(test_inline_additional_properties::<I, A>),
+            post(test_inline_additional_properties::<I, A, E>),
         )
-        .route("/v2/fake/jsonFormData", get(test_json_form_data::<I, A>))
+        .route("/v2/fake/jsonFormData", get(test_json_form_data::<I, A, E>))
         .route(
             "/v2/fake/operation-with-numeric-id",
-            get(call123example::<I, A>),
+            get(call123example::<I, A, E>),
         )
         .route(
             "/v2/fake/outer/boolean",
-            post(fake_outer_boolean_serialize::<I, A>),
+            post(fake_outer_boolean_serialize::<I, A, E>),
         )
         .route(
             "/v2/fake/outer/composite",
-            post(fake_outer_composite_serialize::<I, A>),
+            post(fake_outer_composite_serialize::<I, A, E>),
         )
         .route(
             "/v2/fake/outer/number",
-            post(fake_outer_number_serialize::<I, A>),
+            post(fake_outer_number_serialize::<I, A, E>),
         )
         .route(
             "/v2/fake/outer/string",
-            post(fake_outer_string_serialize::<I, A>),
+            post(fake_outer_string_serialize::<I, A, E>),
         )
         .route(
             "/v2/fake/response-with-numerical-description",
-            get(fake_response_with_numerical_description::<I, A>),
+            get(fake_response_with_numerical_description::<I, A, E>),
         )
-        .route("/v2/fake_classname_test", patch(test_classname::<I, A>))
-        .route("/v2/pet", post(add_pet::<I, A>).put(update_pet::<I, A>))
+        .route("/v2/fake_classname_test", patch(test_classname::<I, A, E>))
         .route(
-            "/v2/pet/:pet_id",
-            delete(delete_pet::<I, A>)
-                .get(get_pet_by_id::<I, A>)
-                .post(update_pet_with_form::<I, A>),
+            "/v2/pet",
+            post(add_pet::<I, A, E, C>).put(update_pet::<I, A, E, C>),
         )
-        .route("/v2/pet/:pet_id/uploadImage", post(upload_file::<I, A>))
-        .route("/v2/pet/findByStatus", get(find_pets_by_status::<I, A>))
-        .route("/v2/pet/findByTags", get(find_pets_by_tags::<I, A>))
-        .route("/v2/store/inventory", get(get_inventory::<I, A>))
-        .route("/v2/store/order", post(place_order::<I, A>))
         .route(
-            "/v2/store/order/:order_id",
-            delete(delete_order::<I, A>).get(get_order_by_id::<I, A>),
+            "/v2/pet/findByStatus",
+            get(find_pets_by_status::<I, A, E, C>),
         )
-        .route("/v2/user", post(create_user::<I, A>))
+        .route("/v2/pet/findByTags", get(find_pets_by_tags::<I, A, E, C>))
         .route(
-            "/v2/user/:username",
-            delete(delete_user::<I, A>)
-                .get(get_user_by_name::<I, A>)
-                .put(update_user::<I, A>),
+            "/v2/pet/{pet_id}",
+            delete(delete_pet::<I, A, E, C>)
+                .get(get_pet_by_id::<I, A, E, C>)
+                .post(update_pet_with_form::<I, A, E, C>),
         )
+        .route(
+            "/v2/pet/{pet_id}/uploadImage",
+            post(upload_file::<I, A, E, C>),
+        )
+        .route("/v2/store/inventory", get(get_inventory::<I, A, E, C>))
+        .route("/v2/store/order", post(place_order::<I, A, E, C>))
+        .route(
+            "/v2/store/order/{order_id}",
+            delete(delete_order::<I, A, E, C>).get(get_order_by_id::<I, A, E, C>),
+        )
+        .route("/v2/user", post(create_user::<I, A, E>))
         .route(
             "/v2/user/createWithArray",
-            post(create_users_with_array_input::<I, A>),
+            post(create_users_with_array_input::<I, A, E>),
         )
         .route(
             "/v2/user/createWithList",
-            post(create_users_with_list_input::<I, A>),
+            post(create_users_with_list_input::<I, A, E>),
         )
-        .route("/v2/user/login", get(login_user::<I, A>))
-        .route("/v2/user/logout", get(logout_user::<I, A>))
+        .route("/v2/user/login", get(login_user::<I, A, E>))
+        .route("/v2/user/logout", get(logout_user::<I, A, E>))
+        .route(
+            "/v2/user/{username}",
+            delete(delete_user::<I, A, E>)
+                .get(get_user_by_name::<I, A, E>)
+                .put(update_user::<I, A, E>),
+        )
         .with_state(api_impl)
 }
 
 #[derive(validator::Validate)]
 #[allow(dead_code)]
 struct TestSpecialTagsBodyValidator<'a> {
-    #[validate]
+    #[validate(nested)]
     body: &'a models::Client,
 }
 
@@ -131,10 +140,9 @@ fn test_special_tags_validation(
 
     Ok((body,))
 }
-
 /// TestSpecialTags - PATCH /v2/another-fake/dummy
 #[tracing::instrument(skip_all)]
-async fn test_special_tags<I, A>(
+async fn test_special_tags<I, A, E>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -143,7 +151,8 @@ async fn test_special_tags<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::another_fake::AnotherFake<E> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation = tokio::task::spawn_blocking(move || test_special_tags_validation(body))
@@ -159,14 +168,14 @@ where
 
     let result = api_impl
         .as_ref()
-        .test_special_tags(method, host, cookies, body)
+        .test_special_tags(&method, &host, &cookies, &body)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            TestSpecialTagsResponse::Status200_SuccessfulOperation(body) => {
+            apis::another_fake::TestSpecialTagsResponse::Status200_SuccessfulOperation(body) => {
                 let mut response = response.status(200);
                 {
                     let mut response_headers = response.headers_mut().unwrap();
@@ -190,10 +199,14 @@ where
                 response.body(Body::from(body_content))
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -207,10 +220,9 @@ where
 fn call123example_validation() -> std::result::Result<(), ValidationErrors> {
     Ok(())
 }
-
 /// Call123example - GET /v2/fake/operation-with-numeric-id
 #[tracing::instrument(skip_all)]
-async fn call123example<I, A>(
+async fn call123example<I, A, E>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -218,7 +230,8 @@ async fn call123example<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::fake::Fake<E> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation = tokio::task::spawn_blocking(move || call123example_validation())
@@ -234,22 +247,26 @@ where
 
     let result = api_impl
         .as_ref()
-        .call123example(method, host, cookies)
+        .call123example(&method, &host, &cookies)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            Call123exampleResponse::Status200_Success => {
+            apis::fake::Call123exampleResponse::Status200_Success => {
                 let mut response = response.status(200);
                 response.body(Body::empty())
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -262,7 +279,7 @@ where
 #[derive(validator::Validate)]
 #[allow(dead_code)]
 struct FakeOuterBooleanSerializeBodyValidator<'a> {
-    #[validate]
+    #[validate(nested)]
     body: &'a models::OuterBoolean,
 }
 
@@ -277,10 +294,9 @@ fn fake_outer_boolean_serialize_validation(
 
     Ok((body,))
 }
-
 /// FakeOuterBooleanSerialize - POST /v2/fake/outer/boolean
 #[tracing::instrument(skip_all)]
-async fn fake_outer_boolean_serialize<I, A>(
+async fn fake_outer_boolean_serialize<I, A, E>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -289,7 +305,8 @@ async fn fake_outer_boolean_serialize<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::fake::Fake<E> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation =
@@ -306,14 +323,14 @@ where
 
     let result = api_impl
         .as_ref()
-        .fake_outer_boolean_serialize(method, host, cookies, body)
+        .fake_outer_boolean_serialize(&method, &host, &cookies, &body)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            FakeOuterBooleanSerializeResponse::Status200_OutputBoolean(body) => {
+            apis::fake::FakeOuterBooleanSerializeResponse::Status200_OutputBoolean(body) => {
                 let mut response = response.status(200);
                 {
                     let mut response_headers = response.headers_mut().unwrap();
@@ -337,10 +354,14 @@ where
                 response.body(Body::from(body_content))
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -353,7 +374,7 @@ where
 #[derive(validator::Validate)]
 #[allow(dead_code)]
 struct FakeOuterCompositeSerializeBodyValidator<'a> {
-    #[validate]
+    #[validate(nested)]
     body: &'a models::OuterComposite,
 }
 
@@ -368,10 +389,9 @@ fn fake_outer_composite_serialize_validation(
 
     Ok((body,))
 }
-
 /// FakeOuterCompositeSerialize - POST /v2/fake/outer/composite
 #[tracing::instrument(skip_all)]
-async fn fake_outer_composite_serialize<I, A>(
+async fn fake_outer_composite_serialize<I, A, E>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -380,7 +400,8 @@ async fn fake_outer_composite_serialize<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::fake::Fake<E> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation =
@@ -397,14 +418,14 @@ where
 
     let result = api_impl
         .as_ref()
-        .fake_outer_composite_serialize(method, host, cookies, body)
+        .fake_outer_composite_serialize(&method, &host, &cookies, &body)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            FakeOuterCompositeSerializeResponse::Status200_OutputComposite(body) => {
+            apis::fake::FakeOuterCompositeSerializeResponse::Status200_OutputComposite(body) => {
                 let mut response = response.status(200);
                 {
                     let mut response_headers = response.headers_mut().unwrap();
@@ -428,10 +449,14 @@ where
                 response.body(Body::from(body_content))
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -444,7 +469,7 @@ where
 #[derive(validator::Validate)]
 #[allow(dead_code)]
 struct FakeOuterNumberSerializeBodyValidator<'a> {
-    #[validate]
+    #[validate(nested)]
     body: &'a models::OuterNumber,
 }
 
@@ -459,10 +484,9 @@ fn fake_outer_number_serialize_validation(
 
     Ok((body,))
 }
-
 /// FakeOuterNumberSerialize - POST /v2/fake/outer/number
 #[tracing::instrument(skip_all)]
-async fn fake_outer_number_serialize<I, A>(
+async fn fake_outer_number_serialize<I, A, E>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -471,7 +495,8 @@ async fn fake_outer_number_serialize<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::fake::Fake<E> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation =
@@ -488,14 +513,14 @@ where
 
     let result = api_impl
         .as_ref()
-        .fake_outer_number_serialize(method, host, cookies, body)
+        .fake_outer_number_serialize(&method, &host, &cookies, &body)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            FakeOuterNumberSerializeResponse::Status200_OutputNumber(body) => {
+            apis::fake::FakeOuterNumberSerializeResponse::Status200_OutputNumber(body) => {
                 let mut response = response.status(200);
                 {
                     let mut response_headers = response.headers_mut().unwrap();
@@ -519,10 +544,14 @@ where
                 response.body(Body::from(body_content))
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -535,7 +564,7 @@ where
 #[derive(validator::Validate)]
 #[allow(dead_code)]
 struct FakeOuterStringSerializeBodyValidator<'a> {
-    #[validate]
+    #[validate(nested)]
     body: &'a models::OuterString,
 }
 
@@ -550,10 +579,9 @@ fn fake_outer_string_serialize_validation(
 
     Ok((body,))
 }
-
 /// FakeOuterStringSerialize - POST /v2/fake/outer/string
 #[tracing::instrument(skip_all)]
-async fn fake_outer_string_serialize<I, A>(
+async fn fake_outer_string_serialize<I, A, E>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -562,7 +590,8 @@ async fn fake_outer_string_serialize<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::fake::Fake<E> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation =
@@ -579,14 +608,14 @@ where
 
     let result = api_impl
         .as_ref()
-        .fake_outer_string_serialize(method, host, cookies, body)
+        .fake_outer_string_serialize(&method, &host, &cookies, &body)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            FakeOuterStringSerializeResponse::Status200_OutputString(body) => {
+            apis::fake::FakeOuterStringSerializeResponse::Status200_OutputString(body) => {
                 let mut response = response.status(200);
                 {
                     let mut response_headers = response.headers_mut().unwrap();
@@ -610,10 +639,14 @@ where
                 response.body(Body::from(body_content))
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -628,10 +661,9 @@ fn fake_response_with_numerical_description_validation() -> std::result::Result<
 {
     Ok(())
 }
-
 /// FakeResponseWithNumericalDescription - GET /v2/fake/response-with-numerical-description
 #[tracing::instrument(skip_all)]
-async fn fake_response_with_numerical_description<I, A>(
+async fn fake_response_with_numerical_description<I, A, E>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -639,7 +671,8 @@ async fn fake_response_with_numerical_description<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::fake::Fake<E> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation =
@@ -656,22 +689,26 @@ where
 
     let result = api_impl
         .as_ref()
-        .fake_response_with_numerical_description(method, host, cookies)
+        .fake_response_with_numerical_description(&method, &host, &cookies)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            FakeResponseWithNumericalDescriptionResponse::Status200 => {
+            apis::fake::FakeResponseWithNumericalDescriptionResponse::Status200 => {
                 let mut response = response.status(200);
                 response.body(Body::empty())
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -689,10 +726,9 @@ fn hyphen_param_validation(
 
     Ok((path_params,))
 }
-
 /// HyphenParam - GET /v2/fake/hyphenParam/{hyphen-param}
 #[tracing::instrument(skip_all)]
-async fn hyphen_param<I, A>(
+async fn hyphen_param<I, A, E>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -701,7 +737,8 @@ async fn hyphen_param<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::fake::Fake<E> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation = tokio::task::spawn_blocking(move || hyphen_param_validation(path_params))
@@ -717,22 +754,26 @@ where
 
     let result = api_impl
         .as_ref()
-        .hyphen_param(method, host, cookies, path_params)
+        .hyphen_param(&method, &host, &cookies, &path_params)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            HyphenParamResponse::Status200_Success => {
+            apis::fake::HyphenParamResponse::Status200_Success => {
                 let mut response = response.status(200);
                 response.body(Body::empty())
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -745,7 +786,7 @@ where
 #[derive(validator::Validate)]
 #[allow(dead_code)]
 struct TestBodyWithQueryParamsBodyValidator<'a> {
-    #[validate]
+    #[validate(nested)]
     body: &'a models::User,
 }
 
@@ -761,10 +802,9 @@ fn test_body_with_query_params_validation(
 
     Ok((query_params, body))
 }
-
 /// TestBodyWithQueryParams - PUT /v2/fake/body-with-query-params
 #[tracing::instrument(skip_all)]
-async fn test_body_with_query_params<I, A>(
+async fn test_body_with_query_params<I, A, E>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -774,7 +814,8 @@ async fn test_body_with_query_params<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::fake::Fake<E> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation = tokio::task::spawn_blocking(move || {
@@ -792,22 +833,26 @@ where
 
     let result = api_impl
         .as_ref()
-        .test_body_with_query_params(method, host, cookies, query_params, body)
+        .test_body_with_query_params(&method, &host, &cookies, &query_params, &body)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            TestBodyWithQueryParamsResponse::Status200_Success => {
+            apis::fake::TestBodyWithQueryParamsResponse::Status200_Success => {
                 let mut response = response.status(200);
                 response.body(Body::empty())
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -820,7 +865,7 @@ where
 #[derive(validator::Validate)]
 #[allow(dead_code)]
 struct TestClientModelBodyValidator<'a> {
-    #[validate]
+    #[validate(nested)]
     body: &'a models::Client,
 }
 
@@ -833,10 +878,9 @@ fn test_client_model_validation(
 
     Ok((body,))
 }
-
 /// TestClientModel - PATCH /v2/fake
 #[tracing::instrument(skip_all)]
-async fn test_client_model<I, A>(
+async fn test_client_model<I, A, E>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -845,7 +889,8 @@ async fn test_client_model<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::fake::Fake<E> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation = tokio::task::spawn_blocking(move || test_client_model_validation(body))
@@ -861,14 +906,14 @@ where
 
     let result = api_impl
         .as_ref()
-        .test_client_model(method, host, cookies, body)
+        .test_client_model(&method, &host, &cookies, &body)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            TestClientModelResponse::Status200_SuccessfulOperation(body) => {
+            apis::fake::TestClientModelResponse::Status200_SuccessfulOperation(body) => {
                 let mut response = response.status(200);
                 {
                     let mut response_headers = response.headers_mut().unwrap();
@@ -892,10 +937,14 @@ where
                 response.body(Body::from(body_content))
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -905,29 +954,42 @@ where
     })
 }
 
-#[tracing::instrument(skip_all)]
-fn test_endpoint_parameters_validation() -> std::result::Result<(), ValidationErrors> {
-    Ok(())
+#[derive(validator::Validate)]
+#[allow(dead_code)]
+struct TestEndpointParametersBodyValidator<'a> {
+    #[validate(nested)]
+    body: &'a models::TestEndpointParametersRequest,
 }
 
+#[tracing::instrument(skip_all)]
+fn test_endpoint_parameters_validation(
+    body: models::TestEndpointParametersRequest,
+) -> std::result::Result<(models::TestEndpointParametersRequest,), ValidationErrors> {
+    let b = TestEndpointParametersBodyValidator { body: &body };
+    b.validate()?;
+
+    Ok((body,))
+}
 /// TestEndpointParameters - POST /v2/fake
 #[tracing::instrument(skip_all)]
-async fn test_endpoint_parameters<I, A>(
+async fn test_endpoint_parameters<I, A, E>(
     method: Method,
     host: Host,
     cookies: CookieJar,
     State(api_impl): State<I>,
+    Form(body): Form<models::TestEndpointParametersRequest>,
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::fake::Fake<E> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
-    let validation = tokio::task::spawn_blocking(move || test_endpoint_parameters_validation())
+    let validation = tokio::task::spawn_blocking(move || test_endpoint_parameters_validation(body))
         .await
         .unwrap();
 
-    let Ok(()) = validation else {
+    let Ok((body,)) = validation else {
         return Response::builder()
             .status(StatusCode::BAD_REQUEST)
             .body(Body::from(validation.unwrap_err().to_string()))
@@ -936,26 +998,30 @@ where
 
     let result = api_impl
         .as_ref()
-        .test_endpoint_parameters(method, host, cookies)
+        .test_endpoint_parameters(&method, &host, &cookies, &body)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            TestEndpointParametersResponse::Status400_InvalidUsernameSupplied => {
+            apis::fake::TestEndpointParametersResponse::Status400_InvalidUsernameSupplied => {
                 let mut response = response.status(400);
                 response.body(Body::empty())
             }
-            TestEndpointParametersResponse::Status404_UserNotFound => {
+            apis::fake::TestEndpointParametersResponse::Status404_UserNotFound => {
                 let mut response = response.status(404);
                 response.body(Body::empty())
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -965,36 +1031,50 @@ where
     })
 }
 
+#[derive(validator::Validate)]
+#[allow(dead_code)]
+struct TestEnumParametersBodyValidator<'a> {
+    #[validate(nested)]
+    body: &'a models::TestEnumParametersRequest,
+}
+
 #[tracing::instrument(skip_all)]
 fn test_enum_parameters_validation(
     header_params: models::TestEnumParametersHeaderParams,
     query_params: models::TestEnumParametersQueryParams,
+    body: Option<models::TestEnumParametersRequest>,
 ) -> std::result::Result<
     (
         models::TestEnumParametersHeaderParams,
         models::TestEnumParametersQueryParams,
+        Option<models::TestEnumParametersRequest>,
     ),
     ValidationErrors,
 > {
     header_params.validate()?;
     query_params.validate()?;
+    if let Some(body) = &body {
+        let b = TestEnumParametersBodyValidator { body };
+        b.validate()?;
+    }
 
-    Ok((header_params, query_params))
+    Ok((header_params, query_params, body))
 }
-
 /// TestEnumParameters - GET /v2/fake
 #[tracing::instrument(skip_all)]
-async fn test_enum_parameters<I, A>(
+async fn test_enum_parameters<I, A, E>(
     method: Method,
     host: Host,
     cookies: CookieJar,
     headers: HeaderMap,
     Query(query_params): Query<models::TestEnumParametersQueryParams>,
     State(api_impl): State<I>,
+    Form(body): Form<Option<models::TestEnumParametersRequest>>,
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::fake::Fake<E> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     // Header parameters
     let header_params = {
@@ -1048,12 +1128,12 @@ where
 
     #[allow(clippy::redundant_closure)]
     let validation = tokio::task::spawn_blocking(move || {
-        test_enum_parameters_validation(header_params, query_params)
+        test_enum_parameters_validation(header_params, query_params, body)
     })
     .await
     .unwrap();
 
-    let Ok((header_params, query_params)) = validation else {
+    let Ok((header_params, query_params, body)) = validation else {
         return Response::builder()
             .status(StatusCode::BAD_REQUEST)
             .body(Body::from(validation.unwrap_err().to_string()))
@@ -1062,26 +1142,37 @@ where
 
     let result = api_impl
         .as_ref()
-        .test_enum_parameters(method, host, cookies, header_params, query_params)
+        .test_enum_parameters(
+            &method,
+            &host,
+            &cookies,
+            &header_params,
+            &query_params,
+            &body,
+        )
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            TestEnumParametersResponse::Status400_InvalidRequest => {
+            apis::fake::TestEnumParametersResponse::Status400_InvalidRequest => {
                 let mut response = response.status(400);
                 response.body(Body::empty())
             }
-            TestEnumParametersResponse::Status404_NotFound => {
+            apis::fake::TestEnumParametersResponse::Status404_NotFound => {
                 let mut response = response.status(404);
                 response.body(Body::empty())
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -1106,10 +1197,9 @@ fn test_inline_additional_properties_validation(
 
     Ok((body,))
 }
-
 /// TestInlineAdditionalProperties - POST /v2/fake/inline-additionalProperties
 #[tracing::instrument(skip_all)]
-async fn test_inline_additional_properties<I, A>(
+async fn test_inline_additional_properties<I, A, E>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -1118,7 +1208,8 @@ async fn test_inline_additional_properties<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::fake::Fake<E> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation =
@@ -1135,22 +1226,26 @@ where
 
     let result = api_impl
         .as_ref()
-        .test_inline_additional_properties(method, host, cookies, body)
+        .test_inline_additional_properties(&method, &host, &cookies, &body)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            TestInlineAdditionalPropertiesResponse::Status200_SuccessfulOperation => {
+            apis::fake::TestInlineAdditionalPropertiesResponse::Status200_SuccessfulOperation => {
                 let mut response = response.status(200);
                 response.body(Body::empty())
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -1160,29 +1255,42 @@ where
     })
 }
 
-#[tracing::instrument(skip_all)]
-fn test_json_form_data_validation() -> std::result::Result<(), ValidationErrors> {
-    Ok(())
+#[derive(validator::Validate)]
+#[allow(dead_code)]
+struct TestJsonFormDataBodyValidator<'a> {
+    #[validate(nested)]
+    body: &'a models::TestJsonFormDataRequest,
 }
 
+#[tracing::instrument(skip_all)]
+fn test_json_form_data_validation(
+    body: models::TestJsonFormDataRequest,
+) -> std::result::Result<(models::TestJsonFormDataRequest,), ValidationErrors> {
+    let b = TestJsonFormDataBodyValidator { body: &body };
+    b.validate()?;
+
+    Ok((body,))
+}
 /// TestJsonFormData - GET /v2/fake/jsonFormData
 #[tracing::instrument(skip_all)]
-async fn test_json_form_data<I, A>(
+async fn test_json_form_data<I, A, E>(
     method: Method,
     host: Host,
     cookies: CookieJar,
     State(api_impl): State<I>,
+    Form(body): Form<models::TestJsonFormDataRequest>,
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::fake::Fake<E> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
-    let validation = tokio::task::spawn_blocking(move || test_json_form_data_validation())
+    let validation = tokio::task::spawn_blocking(move || test_json_form_data_validation(body))
         .await
         .unwrap();
 
-    let Ok(()) = validation else {
+    let Ok((body,)) = validation else {
         return Response::builder()
             .status(StatusCode::BAD_REQUEST)
             .body(Body::from(validation.unwrap_err().to_string()))
@@ -1191,22 +1299,26 @@ where
 
     let result = api_impl
         .as_ref()
-        .test_json_form_data(method, host, cookies)
+        .test_json_form_data(&method, &host, &cookies, &body)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            TestJsonFormDataResponse::Status200_SuccessfulOperation => {
+            apis::fake::TestJsonFormDataResponse::Status200_SuccessfulOperation => {
                 let mut response = response.status(200);
                 response.body(Body::empty())
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -1219,7 +1331,7 @@ where
 #[derive(validator::Validate)]
 #[allow(dead_code)]
 struct TestClassnameBodyValidator<'a> {
-    #[validate]
+    #[validate(nested)]
     body: &'a models::Client,
 }
 
@@ -1232,10 +1344,9 @@ fn test_classname_validation(
 
     Ok((body,))
 }
-
 /// TestClassname - PATCH /v2/fake_classname_test
 #[tracing::instrument(skip_all)]
-async fn test_classname<I, A>(
+async fn test_classname<I, A, E>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -1244,7 +1355,8 @@ async fn test_classname<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::fake_classname_tags123::FakeClassnameTags123<E> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation = tokio::task::spawn_blocking(move || test_classname_validation(body))
@@ -1260,14 +1372,16 @@ where
 
     let result = api_impl
         .as_ref()
-        .test_classname(method, host, cookies, body)
+        .test_classname(&method, &host, &cookies, &body)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            TestClassnameResponse::Status200_SuccessfulOperation(body) => {
+            apis::fake_classname_tags123::TestClassnameResponse::Status200_SuccessfulOperation(
+                body,
+            ) => {
                 let mut response = response.status(200);
                 {
                     let mut response_headers = response.headers_mut().unwrap();
@@ -1291,10 +1405,14 @@ where
                 response.body(Body::from(body_content))
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -1307,7 +1425,7 @@ where
 #[derive(validator::Validate)]
 #[allow(dead_code)]
 struct AddPetBodyValidator<'a> {
-    #[validate]
+    #[validate(nested)]
     body: &'a models::Pet,
 }
 
@@ -1318,10 +1436,9 @@ fn add_pet_validation(body: models::Pet) -> std::result::Result<(models::Pet,), 
 
     Ok((body,))
 }
-
 /// AddPet - POST /v2/pet
 #[tracing::instrument(skip_all)]
-async fn add_pet<I, A>(
+async fn add_pet<I, A, E, C>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -1330,7 +1447,8 @@ async fn add_pet<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::pet::Pet<E, Claims = C> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation = tokio::task::spawn_blocking(move || add_pet_validation(body))
@@ -1344,21 +1462,28 @@ where
             .map_err(|_| StatusCode::BAD_REQUEST);
     };
 
-    let result = api_impl.as_ref().add_pet(method, host, cookies, body).await;
+    let result = api_impl
+        .as_ref()
+        .add_pet(&method, &host, &cookies, &body)
+        .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            AddPetResponse::Status405_InvalidInput => {
+            apis::pet::AddPetResponse::Status405_InvalidInput => {
                 let mut response = response.status(405);
                 response.body(Body::empty())
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -1381,10 +1506,9 @@ fn delete_pet_validation(
 
     Ok((header_params, path_params))
 }
-
 /// DeletePet - DELETE /v2/pet/{petId}
 #[tracing::instrument(skip_all)]
-async fn delete_pet<I, A>(
+async fn delete_pet<I, A, E, C>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -1394,7 +1518,8 @@ async fn delete_pet<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::pet::Pet<E, Claims = C> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     // Header parameters
     let header_params = {
@@ -1436,22 +1561,26 @@ where
 
     let result = api_impl
         .as_ref()
-        .delete_pet(method, host, cookies, header_params, path_params)
+        .delete_pet(&method, &host, &cookies, &header_params, &path_params)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            DeletePetResponse::Status400_InvalidPetValue => {
+            apis::pet::DeletePetResponse::Status400_InvalidPetValue => {
                 let mut response = response.status(400);
                 response.body(Body::empty())
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -1469,10 +1598,9 @@ fn find_pets_by_status_validation(
 
     Ok((query_params,))
 }
-
 /// FindPetsByStatus - GET /v2/pet/findByStatus
 #[tracing::instrument(skip_all)]
-async fn find_pets_by_status<I, A>(
+async fn find_pets_by_status<I, A, E, C>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -1481,7 +1609,8 @@ async fn find_pets_by_status<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::pet::Pet<E, Claims = C> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation =
@@ -1498,14 +1627,14 @@ where
 
     let result = api_impl
         .as_ref()
-        .find_pets_by_status(method, host, cookies, query_params)
+        .find_pets_by_status(&method, &host, &cookies, &query_params)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            FindPetsByStatusResponse::Status200_SuccessfulOperation(body) => {
+            apis::pet::FindPetsByStatusResponse::Status200_SuccessfulOperation(body) => {
                 let mut response = response.status(200);
                 {
                     let mut response_headers = response.headers_mut().unwrap();
@@ -1521,15 +1650,19 @@ where
                 let body_content = body;
                 response.body(Body::from(body_content))
             }
-            FindPetsByStatusResponse::Status400_InvalidStatusValue => {
+            apis::pet::FindPetsByStatusResponse::Status400_InvalidStatusValue => {
                 let mut response = response.status(400);
                 response.body(Body::empty())
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -1547,10 +1680,9 @@ fn find_pets_by_tags_validation(
 
     Ok((query_params,))
 }
-
 /// FindPetsByTags - GET /v2/pet/findByTags
 #[tracing::instrument(skip_all)]
-async fn find_pets_by_tags<I, A>(
+async fn find_pets_by_tags<I, A, E, C>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -1559,7 +1691,8 @@ async fn find_pets_by_tags<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::pet::Pet<E, Claims = C> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation =
@@ -1576,14 +1709,14 @@ where
 
     let result = api_impl
         .as_ref()
-        .find_pets_by_tags(method, host, cookies, query_params)
+        .find_pets_by_tags(&method, &host, &cookies, &query_params)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            FindPetsByTagsResponse::Status200_SuccessfulOperation(body) => {
+            apis::pet::FindPetsByTagsResponse::Status200_SuccessfulOperation(body) => {
                 let mut response = response.status(200);
                 {
                     let mut response_headers = response.headers_mut().unwrap();
@@ -1599,15 +1732,19 @@ where
                 let body_content = body;
                 response.body(Body::from(body_content))
             }
-            FindPetsByTagsResponse::Status400_InvalidTagValue => {
+            apis::pet::FindPetsByTagsResponse::Status400_InvalidTagValue => {
                 let mut response = response.status(400);
                 response.body(Body::empty())
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -1625,20 +1762,34 @@ fn get_pet_by_id_validation(
 
     Ok((path_params,))
 }
-
 /// GetPetById - GET /v2/pet/{petId}
 #[tracing::instrument(skip_all)]
-async fn get_pet_by_id<I, A>(
+async fn get_pet_by_id<I, A, E, C>(
     method: Method,
     host: Host,
     cookies: CookieJar,
+    headers: HeaderMap,
     Path(path_params): Path<models::GetPetByIdPathParams>,
     State(api_impl): State<I>,
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::pet::Pet<E, Claims = C> + apis::ApiKeyAuthHeader<Claims = C> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
+    // Authentication
+    let claims_in_header = api_impl
+        .as_ref()
+        .extract_claims_from_header(&headers, "api_key")
+        .await;
+    let claims = None.or(claims_in_header);
+    let Some(claims) = claims else {
+        return Response::builder()
+            .status(StatusCode::UNAUTHORIZED)
+            .body(Body::empty())
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR);
+    };
+
     #[allow(clippy::redundant_closure)]
     let validation = tokio::task::spawn_blocking(move || get_pet_by_id_validation(path_params))
         .await
@@ -1653,14 +1804,14 @@ where
 
     let result = api_impl
         .as_ref()
-        .get_pet_by_id(method, host, cookies, path_params)
+        .get_pet_by_id(&method, &host, &cookies, &claims, &path_params)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            GetPetByIdResponse::Status200_SuccessfulOperation(body) => {
+            apis::pet::GetPetByIdResponse::Status200_SuccessfulOperation(body) => {
                 let mut response = response.status(200);
                 {
                     let mut response_headers = response.headers_mut().unwrap();
@@ -1676,19 +1827,23 @@ where
                 let body_content = body;
                 response.body(Body::from(body_content))
             }
-            GetPetByIdResponse::Status400_InvalidIDSupplied => {
+            apis::pet::GetPetByIdResponse::Status400_InvalidIDSupplied => {
                 let mut response = response.status(400);
                 response.body(Body::empty())
             }
-            GetPetByIdResponse::Status404_PetNotFound => {
+            apis::pet::GetPetByIdResponse::Status404_PetNotFound => {
                 let mut response = response.status(404);
                 response.body(Body::empty())
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -1701,7 +1856,7 @@ where
 #[derive(validator::Validate)]
 #[allow(dead_code)]
 struct UpdatePetBodyValidator<'a> {
-    #[validate]
+    #[validate(nested)]
     body: &'a models::Pet,
 }
 
@@ -1714,10 +1869,9 @@ fn update_pet_validation(
 
     Ok((body,))
 }
-
 /// UpdatePet - PUT /v2/pet
 #[tracing::instrument(skip_all)]
-async fn update_pet<I, A>(
+async fn update_pet<I, A, E, C>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -1726,7 +1880,8 @@ async fn update_pet<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::pet::Pet<E, Claims = C> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation = tokio::task::spawn_blocking(move || update_pet_validation(body))
@@ -1742,30 +1897,34 @@ where
 
     let result = api_impl
         .as_ref()
-        .update_pet(method, host, cookies, body)
+        .update_pet(&method, &host, &cookies, &body)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            UpdatePetResponse::Status400_InvalidIDSupplied => {
+            apis::pet::UpdatePetResponse::Status400_InvalidIDSupplied => {
                 let mut response = response.status(400);
                 response.body(Body::empty())
             }
-            UpdatePetResponse::Status404_PetNotFound => {
+            apis::pet::UpdatePetResponse::Status404_PetNotFound => {
                 let mut response = response.status(404);
                 response.body(Body::empty())
             }
-            UpdatePetResponse::Status405_ValidationException => {
+            apis::pet::UpdatePetResponse::Status405_ValidationException => {
                 let mut response = response.status(405);
                 response.body(Body::empty())
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -1775,35 +1934,54 @@ where
     })
 }
 
+#[derive(validator::Validate)]
+#[allow(dead_code)]
+struct UpdatePetWithFormBodyValidator<'a> {
+    #[validate(nested)]
+    body: &'a models::UpdatePetWithFormRequest,
+}
+
 #[tracing::instrument(skip_all)]
 fn update_pet_with_form_validation(
     path_params: models::UpdatePetWithFormPathParams,
-) -> std::result::Result<(models::UpdatePetWithFormPathParams,), ValidationErrors> {
+    body: Option<models::UpdatePetWithFormRequest>,
+) -> std::result::Result<
+    (
+        models::UpdatePetWithFormPathParams,
+        Option<models::UpdatePetWithFormRequest>,
+    ),
+    ValidationErrors,
+> {
     path_params.validate()?;
+    if let Some(body) = &body {
+        let b = UpdatePetWithFormBodyValidator { body };
+        b.validate()?;
+    }
 
-    Ok((path_params,))
+    Ok((path_params, body))
 }
-
 /// UpdatePetWithForm - POST /v2/pet/{petId}
 #[tracing::instrument(skip_all)]
-async fn update_pet_with_form<I, A>(
+async fn update_pet_with_form<I, A, E, C>(
     method: Method,
     host: Host,
     cookies: CookieJar,
     Path(path_params): Path<models::UpdatePetWithFormPathParams>,
     State(api_impl): State<I>,
+    Form(body): Form<Option<models::UpdatePetWithFormRequest>>,
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::pet::Pet<E, Claims = C> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation =
-        tokio::task::spawn_blocking(move || update_pet_with_form_validation(path_params))
+        tokio::task::spawn_blocking(move || update_pet_with_form_validation(path_params, body))
             .await
             .unwrap();
 
-    let Ok((path_params,)) = validation else {
+    let Ok((path_params, body)) = validation else {
         return Response::builder()
             .status(StatusCode::BAD_REQUEST)
             .body(Body::from(validation.unwrap_err().to_string()))
@@ -1812,22 +1990,26 @@ where
 
     let result = api_impl
         .as_ref()
-        .update_pet_with_form(method, host, cookies, path_params)
+        .update_pet_with_form(&method, &host, &cookies, &path_params, &body)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            UpdatePetWithFormResponse::Status405_InvalidInput => {
+            apis::pet::UpdatePetWithFormResponse::Status405_InvalidInput => {
                 let mut response = response.status(405);
                 response.body(Body::empty())
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -1845,10 +2027,9 @@ fn upload_file_validation(
 
     Ok((path_params,))
 }
-
 /// UploadFile - POST /v2/pet/{petId}/uploadImage
 #[tracing::instrument(skip_all)]
-async fn upload_file<I, A>(
+async fn upload_file<I, A, E, C>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -1858,7 +2039,8 @@ async fn upload_file<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::pet::Pet<E, Claims = C> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation = tokio::task::spawn_blocking(move || upload_file_validation(path_params))
@@ -1874,14 +2056,14 @@ where
 
     let result = api_impl
         .as_ref()
-        .upload_file(method, host, cookies, path_params, body)
+        .upload_file(&method, &host, &cookies, &path_params, &body)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            UploadFileResponse::Status200_SuccessfulOperation(body) => {
+            apis::pet::UploadFileResponse::Status200_SuccessfulOperation(body) => {
                 let mut response = response.status(200);
                 {
                     let mut response_headers = response.headers_mut().unwrap();
@@ -1905,10 +2087,14 @@ where
                 response.body(Body::from(body_content))
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -1926,10 +2112,9 @@ fn delete_order_validation(
 
     Ok((path_params,))
 }
-
 /// DeleteOrder - DELETE /v2/store/order/{order_id}
 #[tracing::instrument(skip_all)]
-async fn delete_order<I, A>(
+async fn delete_order<I, A, E, C>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -1938,7 +2123,8 @@ async fn delete_order<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::store::Store<E, Claims = C> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation = tokio::task::spawn_blocking(move || delete_order_validation(path_params))
@@ -1954,26 +2140,30 @@ where
 
     let result = api_impl
         .as_ref()
-        .delete_order(method, host, cookies, path_params)
+        .delete_order(&method, &host, &cookies, &path_params)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            DeleteOrderResponse::Status400_InvalidIDSupplied => {
+            apis::store::DeleteOrderResponse::Status400_InvalidIDSupplied => {
                 let mut response = response.status(400);
                 response.body(Body::empty())
             }
-            DeleteOrderResponse::Status404_OrderNotFound => {
+            apis::store::DeleteOrderResponse::Status404_OrderNotFound => {
                 let mut response = response.status(404);
                 response.body(Body::empty())
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -1987,19 +2177,33 @@ where
 fn get_inventory_validation() -> std::result::Result<(), ValidationErrors> {
     Ok(())
 }
-
 /// GetInventory - GET /v2/store/inventory
 #[tracing::instrument(skip_all)]
-async fn get_inventory<I, A>(
+async fn get_inventory<I, A, E, C>(
     method: Method,
     host: Host,
     cookies: CookieJar,
+    headers: HeaderMap,
     State(api_impl): State<I>,
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::store::Store<E, Claims = C> + apis::ApiKeyAuthHeader<Claims = C> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
+    // Authentication
+    let claims_in_header = api_impl
+        .as_ref()
+        .extract_claims_from_header(&headers, "api_key")
+        .await;
+    let claims = None.or(claims_in_header);
+    let Some(claims) = claims else {
+        return Response::builder()
+            .status(StatusCode::UNAUTHORIZED)
+            .body(Body::empty())
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR);
+    };
+
     #[allow(clippy::redundant_closure)]
     let validation = tokio::task::spawn_blocking(move || get_inventory_validation())
         .await
@@ -2012,13 +2216,16 @@ where
             .map_err(|_| StatusCode::BAD_REQUEST);
     };
 
-    let result = api_impl.as_ref().get_inventory(method, host, cookies).await;
+    let result = api_impl
+        .as_ref()
+        .get_inventory(&method, &host, &cookies, &claims)
+        .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            GetInventoryResponse::Status200_SuccessfulOperation(body) => {
+            apis::store::GetInventoryResponse::Status200_SuccessfulOperation(body) => {
                 let mut response = response.status(200);
                 {
                     let mut response_headers = response.headers_mut().unwrap();
@@ -2042,10 +2249,14 @@ where
                 response.body(Body::from(body_content))
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -2063,10 +2274,9 @@ fn get_order_by_id_validation(
 
     Ok((path_params,))
 }
-
 /// GetOrderById - GET /v2/store/order/{order_id}
 #[tracing::instrument(skip_all)]
-async fn get_order_by_id<I, A>(
+async fn get_order_by_id<I, A, E, C>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -2075,7 +2285,8 @@ async fn get_order_by_id<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::store::Store<E, Claims = C> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation = tokio::task::spawn_blocking(move || get_order_by_id_validation(path_params))
@@ -2091,14 +2302,14 @@ where
 
     let result = api_impl
         .as_ref()
-        .get_order_by_id(method, host, cookies, path_params)
+        .get_order_by_id(&method, &host, &cookies, &path_params)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            GetOrderByIdResponse::Status200_SuccessfulOperation(body) => {
+            apis::store::GetOrderByIdResponse::Status200_SuccessfulOperation(body) => {
                 let mut response = response.status(200);
                 {
                     let mut response_headers = response.headers_mut().unwrap();
@@ -2114,19 +2325,23 @@ where
                 let body_content = body;
                 response.body(Body::from(body_content))
             }
-            GetOrderByIdResponse::Status400_InvalidIDSupplied => {
+            apis::store::GetOrderByIdResponse::Status400_InvalidIDSupplied => {
                 let mut response = response.status(400);
                 response.body(Body::empty())
             }
-            GetOrderByIdResponse::Status404_OrderNotFound => {
+            apis::store::GetOrderByIdResponse::Status404_OrderNotFound => {
                 let mut response = response.status(404);
                 response.body(Body::empty())
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -2139,7 +2354,7 @@ where
 #[derive(validator::Validate)]
 #[allow(dead_code)]
 struct PlaceOrderBodyValidator<'a> {
-    #[validate]
+    #[validate(nested)]
     body: &'a models::Order,
 }
 
@@ -2152,10 +2367,9 @@ fn place_order_validation(
 
     Ok((body,))
 }
-
 /// PlaceOrder - POST /v2/store/order
 #[tracing::instrument(skip_all)]
-async fn place_order<I, A>(
+async fn place_order<I, A, E, C>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -2164,7 +2378,8 @@ async fn place_order<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::store::Store<E, Claims = C> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation = tokio::task::spawn_blocking(move || place_order_validation(body))
@@ -2180,14 +2395,14 @@ where
 
     let result = api_impl
         .as_ref()
-        .place_order(method, host, cookies, body)
+        .place_order(&method, &host, &cookies, &body)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            PlaceOrderResponse::Status200_SuccessfulOperation(body) => {
+            apis::store::PlaceOrderResponse::Status200_SuccessfulOperation(body) => {
                 let mut response = response.status(200);
                 {
                     let mut response_headers = response.headers_mut().unwrap();
@@ -2203,15 +2418,19 @@ where
                 let body_content = body;
                 response.body(Body::from(body_content))
             }
-            PlaceOrderResponse::Status400_InvalidOrder => {
+            apis::store::PlaceOrderResponse::Status400_InvalidOrder => {
                 let mut response = response.status(400);
                 response.body(Body::empty())
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -2224,7 +2443,7 @@ where
 #[derive(validator::Validate)]
 #[allow(dead_code)]
 struct CreateUserBodyValidator<'a> {
-    #[validate]
+    #[validate(nested)]
     body: &'a models::User,
 }
 
@@ -2237,10 +2456,9 @@ fn create_user_validation(
 
     Ok((body,))
 }
-
 /// CreateUser - POST /v2/user
 #[tracing::instrument(skip_all)]
-async fn create_user<I, A>(
+async fn create_user<I, A, E>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -2249,7 +2467,8 @@ async fn create_user<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::user::User<E> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation = tokio::task::spawn_blocking(move || create_user_validation(body))
@@ -2265,22 +2484,26 @@ where
 
     let result = api_impl
         .as_ref()
-        .create_user(method, host, cookies, body)
+        .create_user(&method, &host, &cookies, &body)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            CreateUserResponse::Status0_SuccessfulOperation => {
+            apis::user::CreateUserResponse::Status0_SuccessfulOperation => {
                 let mut response = response.status(0);
                 response.body(Body::empty())
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -2293,7 +2516,7 @@ where
 #[derive(validator::Validate)]
 #[allow(dead_code)]
 struct CreateUsersWithArrayInputBodyValidator<'a> {
-    #[validate]
+    #[validate(nested)]
     body: &'a Vec<models::User>,
 }
 
@@ -2306,10 +2529,9 @@ fn create_users_with_array_input_validation(
 
     Ok((body,))
 }
-
 /// CreateUsersWithArrayInput - POST /v2/user/createWithArray
 #[tracing::instrument(skip_all)]
-async fn create_users_with_array_input<I, A>(
+async fn create_users_with_array_input<I, A, E>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -2318,7 +2540,8 @@ async fn create_users_with_array_input<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::user::User<E> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation =
@@ -2335,22 +2558,26 @@ where
 
     let result = api_impl
         .as_ref()
-        .create_users_with_array_input(method, host, cookies, body)
+        .create_users_with_array_input(&method, &host, &cookies, &body)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            CreateUsersWithArrayInputResponse::Status0_SuccessfulOperation => {
+            apis::user::CreateUsersWithArrayInputResponse::Status0_SuccessfulOperation => {
                 let mut response = response.status(0);
                 response.body(Body::empty())
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -2363,7 +2590,7 @@ where
 #[derive(validator::Validate)]
 #[allow(dead_code)]
 struct CreateUsersWithListInputBodyValidator<'a> {
-    #[validate]
+    #[validate(nested)]
     body: &'a Vec<models::User>,
 }
 
@@ -2376,10 +2603,9 @@ fn create_users_with_list_input_validation(
 
     Ok((body,))
 }
-
 /// CreateUsersWithListInput - POST /v2/user/createWithList
 #[tracing::instrument(skip_all)]
-async fn create_users_with_list_input<I, A>(
+async fn create_users_with_list_input<I, A, E>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -2388,7 +2614,8 @@ async fn create_users_with_list_input<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::user::User<E> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation =
@@ -2405,22 +2632,26 @@ where
 
     let result = api_impl
         .as_ref()
-        .create_users_with_list_input(method, host, cookies, body)
+        .create_users_with_list_input(&method, &host, &cookies, &body)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            CreateUsersWithListInputResponse::Status0_SuccessfulOperation => {
+            apis::user::CreateUsersWithListInputResponse::Status0_SuccessfulOperation => {
                 let mut response = response.status(0);
                 response.body(Body::empty())
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -2438,10 +2669,9 @@ fn delete_user_validation(
 
     Ok((path_params,))
 }
-
 /// DeleteUser - DELETE /v2/user/{username}
 #[tracing::instrument(skip_all)]
-async fn delete_user<I, A>(
+async fn delete_user<I, A, E>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -2450,7 +2680,8 @@ async fn delete_user<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::user::User<E> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation = tokio::task::spawn_blocking(move || delete_user_validation(path_params))
@@ -2466,26 +2697,30 @@ where
 
     let result = api_impl
         .as_ref()
-        .delete_user(method, host, cookies, path_params)
+        .delete_user(&method, &host, &cookies, &path_params)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            DeleteUserResponse::Status400_InvalidUsernameSupplied => {
+            apis::user::DeleteUserResponse::Status400_InvalidUsernameSupplied => {
                 let mut response = response.status(400);
                 response.body(Body::empty())
             }
-            DeleteUserResponse::Status404_UserNotFound => {
+            apis::user::DeleteUserResponse::Status404_UserNotFound => {
                 let mut response = response.status(404);
                 response.body(Body::empty())
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -2503,10 +2738,9 @@ fn get_user_by_name_validation(
 
     Ok((path_params,))
 }
-
 /// GetUserByName - GET /v2/user/{username}
 #[tracing::instrument(skip_all)]
-async fn get_user_by_name<I, A>(
+async fn get_user_by_name<I, A, E>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -2515,7 +2749,8 @@ async fn get_user_by_name<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::user::User<E> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation = tokio::task::spawn_blocking(move || get_user_by_name_validation(path_params))
@@ -2531,14 +2766,14 @@ where
 
     let result = api_impl
         .as_ref()
-        .get_user_by_name(method, host, cookies, path_params)
+        .get_user_by_name(&method, &host, &cookies, &path_params)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            GetUserByNameResponse::Status200_SuccessfulOperation(body) => {
+            apis::user::GetUserByNameResponse::Status200_SuccessfulOperation(body) => {
                 let mut response = response.status(200);
                 {
                     let mut response_headers = response.headers_mut().unwrap();
@@ -2554,19 +2789,23 @@ where
                 let body_content = body;
                 response.body(Body::from(body_content))
             }
-            GetUserByNameResponse::Status400_InvalidUsernameSupplied => {
+            apis::user::GetUserByNameResponse::Status400_InvalidUsernameSupplied => {
                 let mut response = response.status(400);
                 response.body(Body::empty())
             }
-            GetUserByNameResponse::Status404_UserNotFound => {
+            apis::user::GetUserByNameResponse::Status404_UserNotFound => {
                 let mut response = response.status(404);
                 response.body(Body::empty())
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -2584,10 +2823,9 @@ fn login_user_validation(
 
     Ok((query_params,))
 }
-
 /// LoginUser - GET /v2/user/login
 #[tracing::instrument(skip_all)]
-async fn login_user<I, A>(
+async fn login_user<I, A, E>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -2596,7 +2834,8 @@ async fn login_user<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::user::User<E> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation = tokio::task::spawn_blocking(move || login_user_validation(query_params))
@@ -2612,14 +2851,14 @@ where
 
     let result = api_impl
         .as_ref()
-        .login_user(method, host, cookies, query_params)
+        .login_user(&method, &host, &cookies, &query_params)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            LoginUserResponse::Status200_SuccessfulOperation {
+            apis::user::LoginUserResponse::Status200_SuccessfulOperation {
                 body,
                 x_rate_limit,
                 x_expires_after,
@@ -2657,7 +2896,6 @@ where
                             .insert(HeaderName::from_static("x-expires-after"), x_expires_after);
                     }
                 }
-
                 let mut response = response.status(200);
                 {
                     let mut response_headers = response.headers_mut().unwrap();
@@ -2673,15 +2911,19 @@ where
                 let body_content = body;
                 response.body(Body::from(body_content))
             }
-            LoginUserResponse::Status400_InvalidUsername => {
+            apis::user::LoginUserResponse::Status400_InvalidUsername => {
                 let mut response = response.status(400);
                 response.body(Body::empty())
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -2695,10 +2937,9 @@ where
 fn logout_user_validation() -> std::result::Result<(), ValidationErrors> {
     Ok(())
 }
-
 /// LogoutUser - GET /v2/user/logout
 #[tracing::instrument(skip_all)]
-async fn logout_user<I, A>(
+async fn logout_user<I, A, E>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -2706,7 +2947,8 @@ async fn logout_user<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::user::User<E> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation = tokio::task::spawn_blocking(move || logout_user_validation())
@@ -2720,21 +2962,28 @@ where
             .map_err(|_| StatusCode::BAD_REQUEST);
     };
 
-    let result = api_impl.as_ref().logout_user(method, host, cookies).await;
+    let result = api_impl
+        .as_ref()
+        .logout_user(&method, &host, &cookies)
+        .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            LogoutUserResponse::Status0_SuccessfulOperation => {
+            apis::user::LogoutUserResponse::Status0_SuccessfulOperation => {
                 let mut response = response.status(0);
                 response.body(Body::empty())
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 
@@ -2747,7 +2996,7 @@ where
 #[derive(validator::Validate)]
 #[allow(dead_code)]
 struct UpdateUserBodyValidator<'a> {
-    #[validate]
+    #[validate(nested)]
     body: &'a models::User,
 }
 
@@ -2762,10 +3011,9 @@ fn update_user_validation(
 
     Ok((path_params, body))
 }
-
 /// UpdateUser - PUT /v2/user/{username}
 #[tracing::instrument(skip_all)]
-async fn update_user<I, A>(
+async fn update_user<I, A, E>(
     method: Method,
     host: Host,
     cookies: CookieJar,
@@ -2775,7 +3023,8 @@ async fn update_user<I, A>(
 ) -> Result<Response, StatusCode>
 where
     I: AsRef<A> + Send + Sync,
-    A: Api,
+    A: apis::user::User<E> + Send + Sync,
+    E: std::fmt::Debug + Send + Sync + 'static,
 {
     #[allow(clippy::redundant_closure)]
     let validation = tokio::task::spawn_blocking(move || update_user_validation(path_params, body))
@@ -2791,26 +3040,30 @@ where
 
     let result = api_impl
         .as_ref()
-        .update_user(method, host, cookies, path_params, body)
+        .update_user(&method, &host, &cookies, &path_params, &body)
         .await;
 
     let mut response = Response::builder();
 
     let resp = match result {
         Ok(rsp) => match rsp {
-            UpdateUserResponse::Status400_InvalidUserSupplied => {
+            apis::user::UpdateUserResponse::Status400_InvalidUserSupplied => {
                 let mut response = response.status(400);
                 response.body(Body::empty())
             }
-            UpdateUserResponse::Status404_UserNotFound => {
+            apis::user::UpdateUserResponse::Status404_UserNotFound => {
                 let mut response = response.status(404);
                 response.body(Body::empty())
             }
         },
-        Err(_) => {
+        Err(why) => {
             // Application code returned an error. This should not happen, as the implementation should
             // return a valid response.
-            response.status(500).body(Body::empty())
+
+            return api_impl
+                .as_ref()
+                .handle_error(&method, &host, &cookies, why)
+                .await;
         }
     };
 

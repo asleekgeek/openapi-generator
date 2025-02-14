@@ -21,7 +21,6 @@ import com.google.common.collect.ImmutableMap;
 import com.samskivert.mustache.Mustache;
 import com.samskivert.mustache.Mustache.Lambda;
 import com.samskivert.mustache.Template;
-import io.swagger.v3.oas.models.media.ArraySchema;
 import io.swagger.v3.oas.models.media.Schema;
 import org.apache.commons.lang3.StringUtils;
 import org.openapitools.codegen.*;
@@ -52,6 +51,7 @@ public class ElmClientCodegen extends DefaultCodegen implements CodegenConfig {
     protected String packageName = "openapi";
     protected String packageVersion = "1.0.0";
 
+    @Override
     public CodegenType getTag() {
         return CodegenType.CLIENT;
     }
@@ -61,6 +61,7 @@ public class ElmClientCodegen extends DefaultCodegen implements CodegenConfig {
         return "elm";
     }
 
+    @Override
     public String getHelp() {
         return "Generates an Elm client library.";
     }
@@ -227,8 +228,21 @@ public class ElmClientCodegen extends DefaultCodegen implements CodegenConfig {
 
     @Override
     public String toVarName(String name) {
-        final String varName = camelize(name.replaceAll("[^a-zA-Z0-9_]", ""), LOWERCASE_FIRST_LETTER);
+        // Replace space with _ (underscore) so camelize works as expected
+        final String varName = camelize(name.replaceAll(" ", "_").replaceAll("[^a-zA-Z0-9_]", ""),
+                LOWERCASE_FIRST_LETTER);
         return isReservedWord(varName) ? escapeReservedWord(name) : varName;
+    }
+
+    @Override
+    public String toParamName(String name) {
+        // obtain the name from parameterNameMapping directly if provided
+        if (parameterNameMapping.containsKey(name)) {
+            return parameterNameMapping.get(name);
+        }
+
+        // params should be lowerCamelCase
+        return toVarName(name);
     }
 
     @Override
@@ -244,8 +258,7 @@ public class ElmClientCodegen extends DefaultCodegen implements CodegenConfig {
     @Override
     public String toInstantiationType(Schema p) {
         if (ModelUtils.isArraySchema(p)) {
-            ArraySchema ap = (ArraySchema) p;
-            String inner = getSchemaType(ap.getItems());
+            String inner = getSchemaType(ModelUtils.getSchemaItems(p));
             return instantiationTypes.get("array") + " " + inner;
         } else {
             return null;
@@ -274,6 +287,7 @@ public class ElmClientCodegen extends DefaultCodegen implements CodegenConfig {
         }
     }
 
+    @Override
     @SuppressWarnings({"static-method", "unchecked"})
     public Map<String, ModelsMap> postProcessAllModels(final Map<String, ModelsMap> orgObjs) {
         final Map<String, ModelsMap> objs = super.postProcessAllModels(orgObjs);
@@ -404,6 +418,7 @@ public class ElmClientCodegen extends DefaultCodegen implements CodegenConfig {
     }
 
     static class ParameterSorter implements Comparator<CodegenParameter> {
+        @Override
         public int compare(final CodegenParameter p1, final CodegenParameter p2) {
             return index(p1) - index(p2);
         }
@@ -464,8 +479,7 @@ public class ElmClientCodegen extends DefaultCodegen implements CodegenConfig {
     @Override
     public String getTypeDeclaration(Schema p) {
         if (ModelUtils.isArraySchema(p)) {
-            ArraySchema ap = (ArraySchema) p;
-            Schema inner = ap.getItems();
+            Schema inner = ModelUtils.getSchemaItems(p);
             return getTypeDeclaration(inner);
         } else if (ModelUtils.isMapSchema(p)) {
             Schema inner = ModelUtils.getAdditionalProperties(p);
